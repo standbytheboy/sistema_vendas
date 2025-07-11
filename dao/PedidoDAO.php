@@ -8,7 +8,7 @@ require_once __DIR__ . '/../database/Database.php';
 
 class PedidoDAO
 {
-    private PDO $db;
+    protected PDO $db;
 
     public function __construct()
     {
@@ -17,17 +17,19 @@ class PedidoDAO
 
     private function mapObject(array $row): Pedido
     {
-        $usuarioDAO = new UsuarioDAO();
-        $formaPagamentoDAO = new FormaPagamentoDAO();
-        $itemPedido = new ItemPedidoDAO();
+        $usuarioDao = new UsuarioDAO();
+        $formaPagamentoDao = new FormaPagamentoDAO();
+        $itemPedidoDao = new ItemPedidoDAO();
 
-        $cliente = $usuarioDAO->getById($row['cliente_id']);
-        $formaPagamento = $formaPagamentoDAO->getById($row['forma_pagamento_id']);
+        $cliente = $usuarioDao->getById($row['cliente_id']);
+        $formaPagamento = $formaPagamentoDao->getById($row['forma_pagamento_id']);
+        
         $usuarioAtualizacao = null;
-        if(!empty($usuarioAtualizacao)){
-            $usuarioAtualizacao = $usuarioDAO->getById($row['usuario_atualizacao']);
+        if (!empty($row['usuario_atualizacao'])) {
+            $usuarioAtualizacao = $usuarioDao->getById($row['usuario_atualizacao']);
         }
         
+        // Cria o objeto Pedido primeiro, sem os itens
         $pedido = new Pedido(
             $row['id'],
             $cliente,
@@ -35,25 +37,30 @@ class PedidoDAO
             $formaPagamento,
             $row['status'],
             (bool)$row['ativo'],
-            [],
+            [], // Itens serão buscados depois
             $row['data_criacao'],
             $row['data_atualizacao'],
             $usuarioAtualizacao
         );
 
-        $itens = $itemPedido->getByPedidoId($pedido->getId());
+        // Agora busca e anexa os itens ao pedido
+        $itens = $itemPedidoDao->getByPedidoId($pedido->getId());
         $pedido->setItens($itens);
 
         return $pedido;
     }
 
-    public function create(Pedido $pedido): bool {
+    // Criar um pedido é uma operação complexa que envolve múltiplas tabelas.
+    // É essencial usar uma transação para garantir a consistência dos dados.
+    public function create(Pedido $pedido): int|false
+    {
         $this->db->beginTransaction();
+
         try {
-            $sql = "INSERT INTO pedido (cliente_id, data_pedido, forma_pagamento_id, status, usuario_atualizacao) 
-                    VALUES (:cliente_id, :data_pedido, :forma_pagamento_id, :status, :user_id)";
-            $stmtPedido = $this->db->prepare($sql);
+            $sqlPedido = "INSERT INTO pedido (cliente_id, data_pedido, forma_pagamento_id, status, usuario_atualizacao) 
+                          VALUES (:cliente_id, :data_pedido, :forma_pagamento_id, :status, :user_id)";
             
+            $stmtPedido = $this->db->prepare($sqlPedido);
             $stmtPedido->execute([
                 ':cliente_id' => $pedido->getCliente()->getId(),
                 ':data_pedido' => $pedido->getDataPedido(),
@@ -62,21 +69,26 @@ class PedidoDAO
                 ':user_id' => $pedido->getCliente()->getId() // O próprio cliente cria o pedido
             ]);
 
+            $pedidoId = $this->db->lastInsertId();
             $itemPedidoDao = new ItemPedidoDAO();
-            $pedidoId = $this->db->lastInsertId(); // usamos o last insert para pegar o ID desse mesmo pedido que acabamos de criar
 
-            foreach($pedido->getItens() as $item) {
-                $itemPedidoDao->create($item, $pedidoId);
+            foreach ($pedido->getItens() as $item) {
+                if (!$itemPedidoDao->create($item, $pedidoId)) {
+                    // Se um item falhar, desfaz tudo
+                    $this->db->rollBack();
+                    return false;
+                }
             }
 
-            $this->db->commit(); // finaliza a transaction
-            return false;
+            $this->db->commit();
+            return (int)$pedidoId;
 
-        } catch (Exception $e) { // se der erro faz rollback
+        } catch (Exception $e) {
             $this->db->rollBack();
+            // Logar o erro $e->getMessage() é uma boa prática
             return false;
         }
-    } 
+    }
 
     public function getById(int $id): ?Pedido
     {
