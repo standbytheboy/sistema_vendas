@@ -48,6 +48,10 @@ require_once __DIR__ . '/../template/header.php';
         <input type="number" id="preco" name="preco" step="0.01" value="<?= htmlspecialchars($produto->getPreco()) ?>" required>
     </div>
     <div class="form-group">
+        <label for="image_url">Link da Imagem do Produto:</label>
+        <input type="text" id="imagem_url" name="imagem_url" value="<?= htmlspecialchars($produto->getImagemUrl()) ?>">
+    </div>
+    <div class="form-group">
         <label for="categoria_id">Categoria:</label>
         <select id="categoria_id" name="categoria_id">
             <option value="">Selecione uma categoria</option>
