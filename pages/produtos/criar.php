@@ -30,7 +30,7 @@ require_once __DIR__ . '/../template/header.php';
     </div>
     <div class="form-group">
         <label for="image_url">Link da Imagem do Produto:</label>
-        <input type="text" id="image_url" name="image_url" >
+        <input type="text" id="imagem_url" name="imagem_url" >
     </div>
     <div class="form-group">
         <label for="categoria_id">Categoria:</label>
